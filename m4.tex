@@ -1,0 +1,645 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage[margin=3cm]{geometry}
+
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{corollary}[theorem]{Corollary}
+\theoremstyle{definition}
+\newtheorem{definition}[theorem]{Definition}
+\newtheorem{remark}[theorem]{Remark}
+
+\newcommand{\Next}{\mathop{\bigcirc}}
+\newcommand{\Always}{\mathop{\square}}
+\newcommand{\Event}{\mathop{\lozenge}}
+\newcommand{\Sub}{\mathrm{Sub}}
+\newcommand{\St}{\mathrm{St}}
+\newcommand{\proves}{\vdash_{\mathcal{L}}}
+\newcommand{\Reach}{\mathrm{Reach}}
+
+\title{Proof extraction from a failed LTL tableau\\
+{\large a uniform loop-invariant construction}}
+\author{}
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Ben-Ari proves completeness of his Hilbert system $\mathcal{L}$ for
+propositional temporal logic (Theorem 12.18) by transforming a failed semantic
+tableau into an $\mathcal{L}$-derivation, but carries out the essential case ---
+a strongly connected component that is not self-fulfilling --- only on the
+single example $\Always p\to\Next\Always p$.  This note gives the construction
+uniformly.  The loop invariant is taken to be the disjunction of the
+characteristic formulas of the states \emph{reachable} from the state being
+refuted, rather than of a strongly connected component; this makes the argument
+independent of any decomposition into components, and makes the induction follow
+the elimination order of the search.  Everything below is finitary: no infinite
+path is ever constructed, and no appeal is made to the principle that an
+infinite path in a finite graph eventually remains within one component.  The
+result is a total function returning either a derivation of $\varphi$ or a finite
+countermodel.
+\end{abstract}
+
+\section*{Introduction}
+
+The point of the construction below is not only that Ben-Ari's classical step is
+replaced by a finite pigeonhole.  It is that the elimination procedure computes
+both certificates at once: an eliminated state $v$ yields a derivation of
+$\neg\chi_v$, a surviving state yields a lasso satisfying $\chi_v$, and the
+procedure produces whichever applies as it runs.  The revealing case is (R2),
+where the failure of an eventuality \emph{automatically} produces an inductive
+invariant, namely the disjunction $B$ of the characteristic formulas of the
+states still reachable from $v$, satisfying $\proves B\to\Next B$; the axiom
+(Ind) then turns this finite invariant into a proof of $\Always A_j$, which
+refutes $v$.  So the decision algorithm already contains the Hilbert-style proof
+implicitly, and extraction is a matter of reading it off rather than
+reconstructing it.
+
+\section{The system $\mathcal{L}$}
+
+Formulas are built from propositional variables by $\neg$, $\to$, $\Next$ and
+$\Always$; we write $\Event A$ for $\neg\Always\neg A$, and use
+$\wedge,\vee,\leftrightarrow$ as the usual abbreviations.
+
+The axioms of $\mathcal{L}$ are
+\begin{align*}
+&\text{(P1)}   && A\to(B\to A)\\
+&\text{(P2)}   && \bigl(A\to(B\to C)\bigr)\to\bigl((A\to B)\to(A\to C)\bigr)\\
+&\text{(P3)}   && (\neg B\to\neg A)\to(A\to B)\\
+&\text{(K}\Always) && \Always(A\to B)\to(\Always A\to\Always B)\\
+&\text{(K}\Next)   && \Next(A\to B)\to(\Next A\to\Next B)\\
+&\text{(Exp)}  && \Always A\to (A\wedge \Next A\wedge \Next\Always A)\\
+&\text{(Ind)}  && \Always(A\to\Next A)\to(A\to\Always A)\\
+&\text{(Lin)}  && \Next\neg A\leftrightarrow\neg\Next A
+\end{align*}
+with modus ponens and generalisation ($\proves A$ implies $\proves\Always A$).
+
+Ben-Ari takes as propositional axiom the scheme (PC), ``every substitution
+instance of a propositional tautology''.  We replace it by (P1)--(P3).  As an
+axiom, (PC) carries a side condition that must be formalised --- a tautology
+checker and a substitution relation --- before the notion of derivation can be
+defined at all, and it then obliges one to relate evaluation to substitution in
+the soundness proof.  See Remark~\ref{rem:pc}.
+
+No completeness theorem for propositional logic is needed to replace it.  The
+propositional reasoning used below is not arbitrary: it consists of the
+following fixed schemes, each with a short direct derivation from (P1)--(P3).
+
+We fix a propositional variable $P_0$ and put $\bot:=\neg(P_0\to P_0)$.
+
+\begin{lemma}[Propositional infrastructure]\label{lem:pc}
+\leavevmode
+\begin{enumerate}
+\item[(L0)] $\proves\neg\bot$, and $\proves\bot\to C$ for every $C$.
+\item[(L1)] $\proves A\to A$; if $\proves A\to B$ and $\proves B\to C$ then
+  $\proves A\to C$; if $\proves B$ then $\proves A\to B$.
+\item[(L2)] $\proves(A_1\wedge\dots\wedge A_n)\to A_i$; and if
+  $\proves C\to A_i$ for all $i$ then $\proves C\to(A_1\wedge\dots\wedge A_n)$.
+\item[(L3)] $\proves A\to(\neg A\to B)$.
+\item[(L4)] $\proves A\vee\neg A$.
+\item[(L5)] $\proves A_i\to(A_1\vee\dots\vee A_n)$; and if $\proves A_i\to C$ for
+  every $i$ then $\proves(A_1\vee\dots\vee A_n)\to C$.
+\item[(L6)] If $\proves\bigvee_i C_i$ then
+  $\proves\bigvee_i(C_i\wedge A)\vee\bigvee_i(C_i\wedge\neg A)$.
+\item[(L7)] $\proves\neg A\to(A\to B)$ and $\proves B\to(A\to B)$.
+\end{enumerate}
+\end{lemma}
+
+\begin{proof}
+(L0) is $\proves\neg\neg(P_0\to P_0)$ from (L1) and (P3), with the second part
+by (L3).  (L1) is the standard consequence of (P1),(P2); (L3),(L4),(L7) follow
+from (P1)--(P3).  (L2) and (L5) are proved by induction on $n$ using (L1).  (L6)
+follows from (L4) and (L5) by induction on the list of disjuncts.
+\end{proof}
+
+Only (L2) and (L5) are indexed by a list; the rest are of fixed size.  We read
+$\bigvee_{i\in I}A_i$ as $\bot$ when $I=\varnothing$, so that the two clauses of
+(L5) at $n=0$ are exactly the two clauses of (L0); every disjunction below is to
+be understood with this convention, and the empty case genuinely occurs (see
+Case (R1) of Theorem~\ref{thm:extract}).  All uses occur under a common
+antecedent, so they compose by lifting under that antecedent; no deduction
+theorem is required.
+
+\begin{lemma}[Derived rules]\label{lem:derived}
+\leavevmode
+\begin{enumerate}
+\item[(D1)] If $\proves A$ then $\proves\Next A$.
+\item[(D2)] If $\proves A\to B$ then $\proves\Next A\to\Next B$.
+\item[(D3)] If $\proves A\to B$ then $\proves\Always A\to\Always B$.
+\item[(D4)] $\proves\Next(A\vee B)\leftrightarrow\Next A\vee\Next B$, and
+  likewise for $\wedge$.
+\item[(D5)] If $\proves A\to\Next A$ then $\proves A\to\Always A$.
+\item[(D6)] $\proves A\wedge\Next\Always A\to\Always A$.
+\end{enumerate}
+\end{lemma}
+
+\begin{proof}
+(D1) From $\proves A$, generalisation gives $\proves\Always A$; (Exp) with (L2)
+gives $\proves\Always A\to\Next A$; modus ponens.
+
+(D2) From $\proves A\to B$, (D1) gives $\proves\Next(A\to B)$, then
+(K$\Next$).
+
+(D3) Same with generalisation and (K$\Always$).
+
+(D4) Read $A\vee B$ as $\neg A\to B$.  By (K$\Next$),
+$\proves\Next(\neg A\to B)\to(\Next\neg A\to\Next B)$; by (Lin) $\Next\neg A$
+may be replaced by $\neg\Next A$, giving
+$\proves\Next(A\vee B)\to\Next A\vee\Next B$.  Conversely
+$\proves A\to A\vee B$ gives $\proves\Next A\to\Next(A\vee B)$ by (D2), and
+symmetrically for $B$; conclude by (L5).  The case of $\wedge$ is dual.
+
+(D5) From $\proves A\to\Next A$, generalisation gives
+$\proves\Always(A\to\Next A)$, and (Ind) gives $\proves A\to\Always A$.
+
+(D6) Put $C:=A\wedge\Next\Always A$.  From $\proves\Always A\to A$ (Exp, L2)
+and (D2), $\proves\Next\Always A\to\Next A$; from
+$\proves\Always A\to\Next\Always A$ (Exp, L2) and (D2),
+$\proves\Next\Always A\to\Next\Next\Always A$.  Hence
+$\proves C\to\Next A\wedge\Next\Next\Always A$, which by (D4) is
+$\proves C\to\Next C$.  By (D5), $\proves C\to\Always C$; since
+$\proves C\to A$, (D3) gives $\proves\Always C\to\Always A$.
+\end{proof}
+
+\section{States and transitions}
+
+Fix a formula $\varphi$ and let $\Sub(\varphi)$ be its set of subformulas, a
+finite set computed by structural recursion.
+
+\begin{remark}
+No closure operation is needed.  One might expect to work over a
+Fischer--Ladner closure --- $\Sub(\varphi)$ enlarged so that
+$\Always A$ brings $\Next\Always A$ with it --- so that the unfolding
+$\Always A\leftrightarrow A\wedge\Next\Always A$ becomes a local condition on a
+single state.  It is cleaner to put the unfolding into the \emph{transition
+relation} instead, as in the automata-theoretic presentation: the auxiliary
+formulas $\Next\Always A$ then never enter the state space, $\Sub$ replaces a
+fixpoint computation by a structural recursion, and the state space
+$2^{|\Sub(\varphi)|}$ is smaller.  Persistence (Lemma~\ref{lem:persist}) becomes
+true by definition rather than by proof.
+\end{remark}
+
+\begin{definition}
+A \emph{valuation} is a function $v:\Sub(\varphi)\to\{0,1\}$; write $A\in v$ for
+$v(A)=1$ and $A\notin v$ for $v(A)=0$.  A valuation is a \emph{state} if
+\begin{enumerate}
+\item[(S1)] it respects the connectives: for $\neg A\in\Sub(\varphi)$,
+  $v(\neg A)=1-v(A)$; for $A\to B\in\Sub(\varphi)$, $v(A\to B)=1$ iff $v(A)=0$
+  or $v(B)=1$;
+\item[(S2)] for $\Always A\in\Sub(\varphi)$: if $\Always A\in v$ then $A\in v$.
+\end{enumerate}
+$\St(\varphi)$ denotes the finite, decidable set of states.
+\end{definition}
+
+\begin{definition}\label{def:trans}
+For states $v,w$ put $v\to w$ iff
+\begin{enumerate}
+\item[(T1)] for every $\Next B\in\Sub(\varphi)$: $\;\Next B\in v$ iff $B\in w$;
+\item[(T2)] for every $\Always A\in\Sub(\varphi)$: if $\Always A\in v$ then
+  $\Always A\in w$;
+\item[(T3)] for every $\Always A\in\Sub(\varphi)$: if $\Always A\notin v$ and
+  $A\in v$ then $\Always A\notin w$.
+\end{enumerate}
+\end{definition}
+
+(T2) and (T3) are the two halves of $\Always A\leftrightarrow A\wedge\Next\Always A$
+with $\Next\Always A$ read as ``$\Always A$ at the successor''; (S2) is the
+remaining half.
+
+\begin{definition}
+The \emph{characteristic formula} of a valuation $v$ is
+\[
+  \chi_v:=\bigwedge_{A\in\Sub(\varphi)}A^{v(A)},\qquad A^1:=A,\; A^0:=\neg A,
+\]
+and for $U\subseteq\St(\varphi)$, $\beta_U:=\bigvee_{v\in U}\chi_v$ with
+$\beta_\emptyset:=\bot$.
+\end{definition}
+
+Note that when $\Always A\notin v$ the literal $\neg\Always A$ occurs in
+$\chi_v$, although $\neg\Always A$ need not belong to $\Sub(\varphi)$.  We shall
+always speak of $\Always A\notin v$, never of $\neg\Always A\in v$.
+
+\begin{lemma}[Non-states are refutable]\label{lem:nonstate}
+If a valuation $v$ is not a state then $\proves\neg\chi_v$.
+\end{lemma}
+
+\begin{proof}
+Each violation is a contradiction among finitely many conjuncts of $\chi_v$,
+extracted by (L2) and closed by (L3); we list them.
+
+If (S1) fails at $\neg A$: either $\neg A,A$ are both conjuncts of $\chi_v$, or
+$\neg\neg A,\neg A$ both are.
+
+If (S1) fails at $A\to B$ with $v(A\to B)=1$: then $A\to B$, $A$, $\neg B$ are
+conjuncts, and modus ponens under the antecedent gives both $B$ and $\neg B$.
+If it fails with $v(A\to B)=0$: then $\neg(A\to B)$ is a conjunct together with
+$\neg A$ or with $B$, and (L7) gives $A\to B$.
+
+If (S2) fails: $\Always A$ and $\neg A$ are conjuncts, and (Exp) with (L2) gives
+$\proves\Always A\to A$.
+\end{proof}
+
+\begin{lemma}[State completeness]\label{lem:complete}
+$\proves\beta_{\St(\varphi)}$.
+\end{lemma}
+
+\begin{proof}
+Enumerate $\Sub(\varphi)=\{A_1,\dots,A_n\}$ and let $D_k$ be the disjunction of
+$\bigwedge_{i\le k}A_i^{u(A_i)}$ over all $u:\{A_1,\dots,A_k\}\to\{0,1\}$.  Then
+$\proves D_0$, and $\proves D_k$ implies $\proves D_{k+1}$ by (L6) with
+$A:=A_{k+1}$.  Hence $\proves D_n=\bigvee_v\chi_v$, ranging over \emph{all}
+valuations.  By Lemma~\ref{lem:nonstate} the disjuncts belonging to non-states
+are refutable, so they are dropped by (L3) and (L5).
+\end{proof}
+
+The derivation is thus built by structural induction along $\Sub(\varphi)$; no
+fresh variables and no substitution occur, in contrast with the usual
+formulation via (PC).
+
+\begin{lemma}[Step]\label{lem:step}
+For every state $v$, $\;\proves\chi_v\to\Next\bigl(\beta_{\{w:v\to w\}}\bigr)$.
+\end{lemma}
+
+\begin{proof}
+By Lemma~\ref{lem:complete} and (D1), $\proves\Next\beta_{\St(\varphi)}$, hence
+$\proves\bigvee_{w\in\St(\varphi)}\Next\chi_w$ by (D4).  Let $w$ be a state with
+$v\not\to w$; we show $\proves\neg(\chi_v\wedge\Next\chi_w)$.
+
+If (T1) fails there is $\Next B\in\Sub(\varphi)$ with $\Next B\in v$, $B\notin w$
+or with $\Next B\notin v$, $B\in w$.  In the first case
+$\proves\chi_v\to\Next B$ and $\proves\chi_w\to\neg B$, so
+$\proves\Next\chi_w\to\Next\neg B$ by (D2) and $\proves\Next\neg B\to\neg\Next B$
+by (Lin); the second case is symmetric.
+
+If (T2) fails then $\Always A\in v$ and $\Always A\notin w$.  Then
+$\proves\chi_v\to\Always A$, and (Exp) gives $\proves\chi_v\to\Next\Always A$;
+while $\proves\chi_w\to\neg\Always A$ gives
+$\proves\Next\chi_w\to\neg\Next\Always A$ by (D2) and (Lin).
+
+If (T3) fails then $\Always A\notin v$, $A\in v$ and $\Always A\in w$.  By (L2),
+$\proves\chi_v\to A$ and $\proves\chi_v\to\neg\Always A$, and
+$\proves\chi_w\to\Always A$ gives $\proves\Next\chi_w\to\Next\Always A$ by (D2).
+Hence
+\[
+  \proves(\chi_v\wedge\Next\chi_w)\to(A\wedge\Next\Always A),
+\]
+and (D6) turns this into
+$\proves(\chi_v\wedge\Next\chi_w)\to\Always A$, while
+$\proves(\chi_v\wedge\Next\chi_w)\to\neg\Always A$; conclude by (L3).
+
+This last case is the proof-theoretic reason for including (T3) explicitly in
+Definition~\ref{def:trans}: it is precisely the condition whose violation (D6)
+refutes.
+
+Dropping these disjuncts by (L3),(L5) yields
+$\proves\chi_v\to\bigvee_{v\to w}\Next\chi_w$, which is the claim by (D4).
+\end{proof}
+
+\begin{lemma}[Persistence]\label{lem:persist}
+If $v\to w$, $\Always A\notin v$ and $A\in v$, then $\Always A\notin w$.
+\end{lemma}
+
+\begin{proof}
+This is (T3).
+\end{proof}
+
+\section{The elimination procedure}
+
+Let $\Always A_1,\dots,\Always A_m$ enumerate the members of $\Sub(\varphi)$ of
+the form $\Always A$.  Say that the $j$-th eventuality is \emph{pending} at a
+state $v$ if $\Always A_j\notin v$, and \emph{fulfilled} at $w$ if
+$A_j\notin w$.
+
+For $U\subseteq\St(\varphi)$ and $v\in U$, let $\Reach_U(v)$ be the set of
+states reachable from $v$ by $\to$-steps inside $U$, including $v$.
+
+\begin{definition}[Elimination]\label{def:elim}
+Set $U_0:=\St(\varphi)$.  Given $U_k$, remove from it every state $v$ to which
+one of the following applies, and call the result $U_{k+1}$:
+\begin{itemize}
+\item[(R1)] $v$ has no $\to$-successor in $U_k$;
+\item[(R2)] for some $j$, the $j$-th eventuality is pending at $v$ and is
+  fulfilled at no state of $\Reach_{U_k}(v)$.
+\end{itemize}
+Stop when $U_{k+1}=U_k$; write $U_\infty$ for the result and
+$R:=\St(\varphi)\setminus U_\infty$.
+\end{definition}
+
+Both conditions are decidable, each round removes at least one state unless it
+is the last, and $\St(\varphi)$ is finite, so the procedure terminates in at
+most $|\St(\varphi)|$ rounds.
+
+\begin{remark}\label{rem:gfp}
+Condition (R2) may be read as a greatest fixed point, and it is worth doing so.
+Put $W_j^0:=\{w\in U_k:A_j\in w\}$, and let $W_j$ be the largest subset of
+$W_j^0$ closed under $\to$-successors lying in $U_k$ --- computed by deleting
+from $W_j^0$ every state having a successor in $U_k$ outside it, and repeating.
+Then, for $j$ pending at $v$,
+\[
+  A_j\in w\ \text{ for every } w\in\Reach_{U_k}(v)
+  \qquad\Longleftrightarrow\qquad
+  v\in W_j ,
+\]
+since $\Reach_{U_k}(v)$ is the least closed set containing $v$ and $W_j$ the
+largest closed subset of $W_j^0$.
+
+The reformulation costs nothing and buys step (ii) of
+Theorem~\ref{thm:extract}.  The only properties of $W$ used there are that
+$A_j$ holds throughout it, that $v\in W$, and that it is closed under
+$\to$-successors lying in $U_k$; taking $W:=W_j$ the first is inclusion in
+$W_j^0$, the second is (R2) itself, and the third holds \emph{by construction},
+where for $\Reach_{U_k}(v)$ it holds only once one knows that the iteration
+computing that set has converged.  The proof of the theorem below goes through
+verbatim with either reading.
+\end{remark}
+
+\section{The extraction theorem}
+
+This is the content that Ben-Ari gives only by example.
+
+\begin{theorem}[Extraction]\label{thm:extract}
+$\proves\neg\chi_v$ for every $v\in R$.
+\end{theorem}
+
+\begin{proof}
+By induction on the round $k$ at which $v$ is removed; the induction hypothesis
+is that $\proves\neg\chi_u$ for every $u\in\St(\varphi)\setminus U_k$.
+
+\medskip\noindent\textbf{Case (R1).}
+By Lemma~\ref{lem:step}, $\proves\chi_v\to\Next\beta_S$ with $S=\{w:v\to w\}$.
+Every $w\in S$ lies outside $U_k$, since by (R1) none lies in $U_k$; so
+$\proves\neg\chi_w$ by hypothesis for each, whence $\proves\neg\beta_S$ by (L5).
+Here $S$ may be empty --- indeed it is whenever $v$ has no successors at all ---
+and then $\beta_S=\bot$ and $\proves\neg\beta_S$ is (L0); the two cases are
+uniform under the convention fixed after Lemma~\ref{lem:pc}.  By (D1)
+$\proves\Next\neg\beta_S$, and by (Lin) $\proves\neg\Next\beta_S$.  Therefore
+$\proves\neg\chi_v$ by (L3).
+
+\medskip\noindent\textbf{Case (R2).}
+Fix $j$ as in (R2) and put
+\[
+  W:=\Reach_{U_k}(v),\qquad B:=\beta_W .
+\]
+$B$ is the loop invariant.
+
+\medskip
+\emph{(i) $\proves B\to A_j$.}  By the hypothesis of (R2) the $j$-th eventuality
+is fulfilled at no state of $W$, that is $A_j\in w$ for every $w\in W$.  So
+$A_j$ is a conjunct of $\chi_w$ and $\proves\chi_w\to A_j$ by (L2); conclude by
+(L5).
+
+\medskip
+\emph{(ii) $\proves B\to\Next B$.}  Let $w\in W$ and $S_w:=\{w':w\to w'\}$.  By
+Lemma~\ref{lem:step}, $\proves\chi_w\to\Next\beta_{S_w}$.  For
+$w'\in S_w\setminus U_k$ we have $\proves\neg\chi_{w'}$ by hypothesis; for
+$w'\in S_w\cap U_k$ we have $w'\in W$, since $W$ is closed under
+$\to$-successors lying in $U_k$.  Hence $\proves\beta_{S_w}\to B$ by (L3),(L5),
+this being (L0) when $S_w=\varnothing$, and
+$\proves\Next\beta_{S_w}\to\Next B$ by (D2).  So $\proves\chi_w\to\Next B$
+for every $w\in W$; conclude by (L5).
+
+\medskip
+\emph{(iii) $\proves B\to\Always A_j$.}  From (ii) and (D5),
+$\proves B\to\Always B$; from (i) and (D3), $\proves\Always B\to\Always A_j$.
+
+\medskip
+Now $v\in W$, so $\proves\chi_v\to B$ and hence $\proves\chi_v\to\Always A_j$.
+Since the eventuality is pending at $v$, $\neg\Always A_j$ is a conjunct of
+$\chi_v$, so $\proves\chi_v\to\neg\Always A_j$ by (L2).  Therefore
+$\proves\neg\chi_v$ by (L3).
+\end{proof}
+
+\begin{remark}
+The invariant is the disjunction over the \emph{reachable} set $W$, not over a
+strongly connected component.  This is what makes the case uniform: no
+decomposition into components is needed, edges leaving $U_k$ are absorbed by the
+induction hypothesis in step (ii), and the pending eventuality is refuted by a
+single use of (Ind) through (D5).
+
+Ben-Ari's worked example $\varphi=\neg(\Always p\to\Next\Always p)$ is
+\emph{not} an instance of this case.  In the present formulation it is settled
+by (R1) alone: because $\Next\Always p$ lies in $\Sub(\varphi)$ there, (T1)
+forces $\Always p\notin w$ at any successor $w$ while (T2) forces
+$\Always p\in w$, so the states containing $\varphi$ have no successor at all
+and are removed in the first round.  His tableau needed the loop invariant
+precisely because it carried $\Next\Always p$ as a member of the closure; here
+Remark~2.1 has moved that formula into the transition relation, and the
+contradiction becomes local.  A small instance that does reach (R2) is
+$\varphi=\neg(\Always p\to\Always\Next p)$: the state with $\Always p$ and
+$\Always\Next p\notin v$ has successors, so (R1) does not apply, while (T2)
+carries $\Always p$ along every path, (S2) then gives $p$ and (T1) gives
+$\Next p$ at every state reached, so the eventuality that $\Always\Next p$
+leaves pending is fulfilled nowhere.
+\end{remark}
+
+\begin{remark}
+The proof gives more than is stated: the same $B$ refutes every $w\in W$ at
+which the $j$-th eventuality is pending, so all of them may be removed in one
+round, sharing a single derivation.
+\end{remark}
+
+\section{The other branch: a fulfilling lasso}
+
+\begin{lemma}\label{lem:fix}
+Every $v\in U_\infty$ has a $\to$-successor in $U_\infty$, and for every
+$v\in U_\infty$ and every $j$ pending at $v$, some state of
+$\Reach_{U_\infty}(v)$ fulfils the $j$-th eventuality.
+\end{lemma}
+
+\begin{proof}
+Otherwise (R1) or (R2) would apply and the procedure would not have stopped.
+\end{proof}
+
+\begin{definition}\label{def:round}
+A \emph{round} from $u\in U_\infty$ is the finite path in $U_\infty$ obtained as
+follows.  Let $u_0:=u$.  For $j=1,\dots,m$: if the $j$-th eventuality is pending
+at $u_{j-1}$, let $u_j$ be the endpoint of a path in $U_\infty$ from $u_{j-1}$
+to a state fulfilling it, which exists by Lemma~\ref{lem:fix}; otherwise
+$u_j:=u_{j-1}$ by the empty path.  Finally let $u_{m+1}$ be any
+$\to$-successor of $u_m$ in $U_\infty$, which exists by the first half of
+Lemma~\ref{lem:fix}.  The round ends at $u_{m+1}$, and traverses at least one
+transition.
+\end{definition}
+
+The last step is not decoration.  Without it a round is empty whenever no
+eventuality is pending at $u$, and that case occurs: for
+$\varphi=\neg(\Always p\to\Always\Next p)$ the surviving state at which $p$
+holds forever leaves nothing pending.  Then all the boundaries
+$b_0,b_1,\dots$ of Proposition~\ref{prop:lasso} coincide without a single
+transition being traversed, the ``cycle'' obtained there has length zero, and
+the unwinding after it divides by $q-p=0$.  With the last step every round
+traverses at least one transition, so a repetition among the boundaries yields a
+cycle of length at least one.  Nothing else in the argument is affected: the
+fulfilment property proved below concerns the states a round visits, and adding
+a state to the end only enlarges that set.
+
+\begin{proposition}\label{prop:lasso}
+If $U_\infty\neq\emptyset$ then from every $v_0\in U_\infty$ there is a
+\emph{fulfilling lasso}: a finite path $v_0\to\dots\to v_p$ followed by a cycle
+$v_p\to\dots\to v_q=v_p$ such that every eventuality pending at a state of the
+cycle is fulfilled at a state of the cycle.
+\end{proposition}
+
+\begin{proof}
+Concatenate rounds from $v_0$, giving boundaries $b_0=v_0,b_1,b_2,\dots$.  Among
+$b_0,\dots,b_{|U_\infty|}$ two coincide, say $b_a=b_c$ with $a<c$; this is the
+pigeonhole principle for an explicitly given finite list, so the indices are
+found by inspection.  Take the prefix up to $b_a$ and the cycle from $b_a$ to
+$b_c$, which by Definition~\ref{def:round} traverses at least $c-a$
+transitions and so is a genuine cycle.
+
+It is worth saying how the inspection goes, because it needs no pigeonhole
+\emph{lemma}.  Generate the boundaries one at a time, carrying alongside them
+the set $S$ of states of $U_\infty$ not yet used as a boundary, so that every
+state of $U_\infty$ is either an earlier boundary or in $S$.  A newly generated
+boundary is either one already seen --- and then the cycle closes --- or a fresh
+one, and then it leaves $S$, which can happen at most $|U_\infty|$ times.  The
+pigeonhole is thus the invariant of a terminating search rather than a separate
+principle to be invoked.
+
+Let the $j$-th eventuality be pending at a state $s$ of the cycle.  Travelling
+along the cycle from $s$, either it is fulfilled at some state --- and we are
+done --- or by Lemma~\ref{lem:persist} it is still pending at the endpoint
+$b_c=b_a$, hence at the start of round $a{+}1$, which fulfils it by
+construction.  Either way it is fulfilled inside the cycle.
+\end{proof}
+
+The lasso is unwound into the infinite sequence $v_0,v_1,v_2,\dots$ with
+$v_{i}=v_{p+((i-p)\bmod(q-p))}$ for $i\ge p$.
+
+\begin{lemma}[Global fulfillment]\label{lem:global}
+For every $i$ and every $\Always A\in\Sub(\varphi)$ with $\Always A\notin v_i$,
+there is $j\ge i$ with $A\notin v_j$.
+\end{lemma}
+
+\begin{proof}
+Suppose first that $i\ge p$, so $v_i$ lies on the cycle.  By
+Proposition~\ref{prop:lasso} the eventuality is fulfilled at some state of the
+cycle, and since the cycle repeats, that state occurs at some index $j\ge i$.
+
+Now suppose $i<p$.  If $A\notin v_k$ for some $k$ with $i\le k<p$ we are done.
+Otherwise $A\in v_k$ for all such $k$, and Lemma~\ref{lem:persist} gives
+$\Always A\notin v_{k+1}$ successively, so $\Always A\notin v_p$; apply the
+previous case at $p\ge i$.
+\end{proof}
+
+The lasso is a finite structure with a total successor function, so $\Always$
+and $\Event$ evaluate on it by conjunction and disjunction over the finite
+forward orbit of a state; write $[\![\,\cdot\,]\!]_s$ for that Boolean
+evaluation.  One checks by induction on derivations that $\proves C$ implies
+$[\![C]\!]_s=1$ at every state of every lasso --- soundness --- and by induction
+on formulas, using (T1) for $\Next$, (S2) and (T2) for $\Always A\in v_i$, and
+Lemma~\ref{lem:global} for $\Always A\notin v_i$, that
+\[
+  A\in v_i\iff [\![A]\!]_{v_i}=1 \qquad (A\in\Sub(\varphi)),
+\]
+which is Hintikka's lemma.
+
+\section{Decidability}
+
+\begin{theorem}\label{thm:main}
+There is a total computable function taking $\varphi$ to an element of
+\[
+  \mathrm{Deriv}_{\mathcal{L}}(\varphi)\;+\;\mathrm{LassoCountermodel}(\varphi).
+\]
+\end{theorem}
+
+\begin{proof}
+Run the elimination of Definition~\ref{def:elim} on $\Sub(\neg\varphi)$ and ask
+whether some $v_0\in U_\infty$ has $\neg\varphi\in v_0$.  This is decidable,
+$U_\infty$ being finite.
+
+If there is one, Proposition~\ref{prop:lasso} gives a fulfilling lasso through
+$v_0$, and Hintikka's lemma gives $[\![\neg\varphi]\!]_{v_0}=1$, so
+$[\![\varphi]\!]_{v_0}=0$.  By soundness $\proves\varphi$ would give
+$[\![\varphi]\!]_{v_0}=1$; the lasso is therefore a countermodel.
+
+If there is none, every state containing $\neg\varphi$ lies in $R$, so
+$\proves\neg\chi_v$ for each by Theorem~\ref{thm:extract}.  Every remaining
+state contains $\varphi$, so $\proves\chi_v\to\varphi$ by (L2).  By
+Lemma~\ref{lem:complete} and (L3),(L5), $\proves\varphi$.
+\end{proof}
+
+In particular $\proves\varphi$ is decidable, but the theorem says more: both
+branches carry a checkable certificate, and neither is obtained by refuting the
+other.
+
+\begin{remark}
+No step above constructs an infinite path, and the principle that an infinite
+path in a finite graph eventually remains within one strongly connected
+component --- the converse half of Ben-Ari's Theorem 11.44, and the ``key
+insight'' of the usual automata-theoretic presentation --- is never used.  The
+only combinatorial principle is the pigeonhole principle for an explicitly given
+finite list, in Proposition~\ref{prop:lasso}, and even that is not needed as a
+lemma: organised as in the proof there, it is the termination of a search that
+removes one state from a finite pool at each round.  The two branches of
+Theorem~\ref{thm:main} are asymmetric by design: the failure branch returns a
+derivation rather than an assertion of unsatisfiability, and that is what
+removes the need for the classical step.
+\end{remark}
+
+\begin{remark}\label{rem:pc}
+On (PC).  Read as an axiom scheme, ``substitution instance of a propositional
+tautology'' carries a side condition, so a formalisation must define a tautology
+checker and the substitution relation before it can say what a derivation
+\emph{is}, and must then prove a substitution lemma relating evaluation to
+substitution in order to establish soundness.  With (P1)--(P3) the derivations
+form a plain inductive family with ten constructors --- the eight axiom schemes,
+modus ponens and generalisation --- and soundness inspects
+three concrete formulas.
+
+No propositional \emph{completeness} theorem is needed to make up the
+difference.  One might expect to recover (PC) as a derived rule by Kalm\'ar's
+argument and then discharge each propositional step by a truth-table
+computation; but Kalm\'ar's argument needs the deduction theorem to discharge
+its hypotheses, and it is unnecessary here.  The propositional facts used are
+the fixed schemes of Lemma~\ref{lem:pc}, of which only (L2) and (L5) are indexed
+by a list, and the one step that looks as though it needs a tautology checker
+--- state completeness, Lemma~\ref{lem:complete} --- is instead a structural
+induction along $\Sub(\varphi)$.
+\end{remark}
+
+\begin{remark}[Formalisation]
+Everything above has been checked in Agda --- \texttt{--safe},
+\texttt{--without-K}, \texttt{--exact-split}, no library --- in thirty modules
+and about five thousand lines, with Theorem~\ref{thm:main} as a total function
+\[
+  \mathrm{decide} : (Q:\mathrm{Formula})\to
+  \mathrm{Deriv}(Q)\;+\;\mathrm{LassoCountermodel}(Q),
+\]
+and with no postulates, no unfilled goals and no termination pragmas.  The
+development runs: $\Always p\to\Always\Always p$ and
+$\Always(p\to\Next p)\to(p\to\Always p)$ are decided affirmatively, and
+$\Event p\to\Always p$ negatively, returning the lasso on which $p$ recurs
+without persisting.
+
+Three of the remarks above record places where formalising changed the argument
+rather than merely transcribing it: the final step in
+Definition~\ref{def:round}, without which Proposition~\ref{prop:lasso} is false
+as stated; Remark~\ref{rem:gfp}, where reading (R2) as a greatest fixed point
+makes the closure needed in step (ii) of Theorem~\ref{thm:extract} hold by
+construction; and the reading of the pigeonhole as a search invariant.  A
+fourth is the correction to the remark following Theorem~\ref{thm:extract}:
+Ben-Ari's own example does not exercise case (R2) here, which the machine
+noticed and the author had not.
+\end{remark}
+
+\begin{remark}
+The same strategy should extend to \emph{until}, but the extension is not
+purely notational and is not claimed here.  One adds
+$A\,\mathcal{U}\,B\leftrightarrow B\vee(A\wedge\Next(A\,\mathcal{U}\,B))$ to
+Definitions~2.2 and \ref{def:trans} in the manner of (S2),(T2),(T3), and takes
+$A\,\mathcal{U}\,B$ pending at $v$ when $A\,\mathcal{U}\,B\in v$ and $B\notin v$.
+What has to be checked is that step (i) of Theorem~\ref{thm:extract} still
+goes through: the obligation is no longer the single formula $A_j$ but the
+conjunction of $A$ with the persistence of $A\,\mathcal{U}\,B$, so the invariant
+$B=\beta_W$ must be shown to imply both.  The analogue of
+Lemma~\ref{lem:persist} likewise has to carry the side condition that $A$ holds
+throughout.  Half a page of proof, not a remark.
+\end{remark}
+
+\end{document}

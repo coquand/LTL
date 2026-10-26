@@ -1,0 +1,264 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{amsmath,amssymb}
+\usepackage[margin=27mm]{geometry}
+\usepackage[hidelinks]{hyperref}
+\usepackage{enumitem}
+\setlist{nosep}
+\newcommand{\repo}{https://github.com/coquand/LTL}
+\newcommand{\Next}{\mathsf{X}}
+\newcommand{\Always}{\mathsf{G}}
+\newcommand{\Event}{\mathsf{F}}
+\newcommand{\Until}{\mathbin{\mathsf{U}}}
+\newcommand{\Deriv}{\operatorname{Deriv}}
+\title{A constructive, executable decision procedure\\
+for linear temporal logic in Agda\\[4pt]
+\large Proposal for a master's thesis}
+\author{}
+\date{October 26, 2026}
+\begin{document}
+\maketitle
+
+\paragraph{Starting point.}
+The student has followed an elementary course in Agda; no prior knowledge
+of linear temporal logic (LTL) is assumed. The project starts by learning
+LTL and its usual decidability proof, then develops an existing Agda
+formalisation into a clearer, executable, proof-producing procedure for
+LTL including \emph{Until}. A further objective is to understand the
+constructive status of the semantic statements used in the classical proof.
+
+\paragraph{Existing development.}
+The Agda sources and accompanying mathematical notes are available at
+\begin{center}
+\url{https://github.com/coquand/LTL}.
+\end{center}
+The development treats Boolean connectives, \emph{next} ($\Next$), and
+\emph{always} ($\Always$); \emph{eventually} is an abbreviation
+$\Event A=\neg\Always\neg A$. Until is not yet included.
+There are two decision procedures, based respectively on state elimination
+and strongly connected components (SCCs), with a comparison suite of
+47 examples. Their result has the form
+\[
+ \Deriv(A)\; +\;\operatorname{LassoCountermodel}(A).
+\]
+Thus a positive answer carries a derivation in a temporal proof system,
+and a negative answer carries a finite countermodel represented by a prefix
+and a repeating cycle, together with a refutation of derivability.
+The files \texttt{m4.pdf} and \texttt{m5.pdf} explain the two constructions.
+The sources use Agda's \texttt{--safe --without-K --exact-split} options
+and do not depend on the standard library.
+
+\section{First stage: learn LTL and the usual decidability proof}
+
+The first task is mathematical study, before changing the formalisation.
+The primary reference is Ben-Ari's \emph{Mathematical Logic for Computer
+Science}~\cite{benari}, especially the chapters entitled
+\emph{Temporal Logic: Formulas, Models, Tableaux} and
+\emph{Temporal Logic: A Deductive System}. These are Chapters~13 and~14
+in the third edition. The existing development refers to Chapters~11
+and~12 of an earlier edition; chapter titles should be used to match
+the material across editions.
+
+The student should learn:
+\begin{enumerate}
+\item The syntax and semantics of LTL on infinite words: Boolean
+connectives, next, always, eventually, and Until; validity,
+satisfiability, and evaluation on a specified word.
+\item Ben-Ari's deductive system, representative derivations, and the
+soundness and completeness arguments, including extraction of a
+derivation from a failed tableau search.
+\item The usual decidability argument: a finite closure of subformulas,
+locally consistent states, transitions, eventuality obligations,
+accepting components, and ultimately periodic models.
+\item The automata perspective: translation to generalized B\"uchi
+automata and reduction to an emptiness problem. Vardi's survey
+and the construction of Gerth et al. provide complementary
+accounts~\cite{vardi,gerth}.
+\end{enumerate}
+
+An initial deliverable is a short written account of the standard proof,
+with several tableaux and lasso models worked out by hand. The student
+should be able to explain why a cycle satisfying all local transition
+conditions can nevertheless fail an eventuality obligation. This prepares
+the distinction between an arbitrary loop and a fair loop that is central
+to the Agda development.
+
+\section{Understand and clarify the constructive proof}
+
+The next task is to read the mathematical notes and trace the main Agda
+interfaces. Useful entry points are \texttt{LTL.Formula},
+\texttt{LTL.Deriv}, \texttt{LTL.Decide}, \texttt{LTL.DecideSCC},
+\texttt{LTL.ShortPC}, and \texttt{LTL.Compare}.
+The desired account should explain how a finite search produces either
+a derivation or a countermodel, and where temporal induction enters the
+proof of refutability of eliminated states.
+
+One concrete opportunity for simplification is the interface between a
+fair lasso and its correctness proof. Currently the SCC procedure still
+uses the original elimination computation on its countermodel branch to
+reuse a correctness theorem stated for the surviving states. A more
+general truth lemma for fair lassos of locally consistent states could
+remove that dependency. This is a candidate redesign to investigate;
+the project should choose the refactoring that best supports the Until
+extension rather than reorganise every module.
+
+The mathematical explanations, module boundaries, and theorem statements
+are part of the contribution. A successful reorganisation should make the
+conditions on a countermodel explicit and reduce the amount of duplicated
+reasoning. Existing verified work on LTL-to-automata translation offers
+useful related work~\cite{schimpf}.
+
+\section{Extend the proof-producing procedure with Until}
+
+For an infinite valuation sequence $\sigma$, the intended positive clause is
+\[
+ \sigma,i\models A\Until B
+ \quad\Longleftrightarrow\quad
+ \exists j\geq i\;
+ \bigl(\sigma,j\models B\ \land\
+       \forall k\,(i\leq k<j\Rightarrow\sigma,k\models A)\bigr).
+\]
+The student should extend the syntax, proof system, state construction,
+and correctness arguments. The unfolding law
+\[
+ A\Until B\ \leftrightarrow\ B\lor(A\land\Next(A\Until B))
+\]
+must be accompanied by an appropriate least-fixed-point principle in
+the proof system and a fairness condition in the search. Unfolding alone
+allows an obligation to be postponed forever. The relevant fairness
+predicate on a state $s$ is
+\[
+ (A\Until B)\notin s\quad\lor\quad B\in s.
+\]
+The truth lemma must also account for the fact that $A$ holds along the
+path before the occurrence of $B$.
+
+The target is a total Agda procedure returning a derivation or a certified
+lasso countermodel for the extended language, with the hypotheses and
+metatheory stated explicitly. The existing proof system and derived
+connectives should be related carefully to any additional semantic
+connectives used when explaining Until.
+
+\section{Why the semantic interpretation matters constructively}
+
+The thesis should distinguish decidability of derivability, validity on
+explicitly presented lassos, satisfaction on a given arbitrary infinite
+word, and validity over all infinite words. It should identify the
+additional principles required by the classical semantic justification,
+with precise statements instead of a blanket identification of these
+decision problems.
+
+A small formal example provides a useful starting point. Interpret
+eventually by constructive existence and disjunction by constructive
+disjunction. Validity over all Boolean streams of
+\[
+ \Event p\lor\Always\neg p
+\]
+is equivalent to the limited principle of omniscience (LPO):
+\[
+ \forall\alpha:\mathbb N\to\{0,1\},\qquad
+ (\exists n\;\alpha(n)=1)\ \lor\ (\forall n\;\alpha(n)=0).
+\]
+On a finite prefix and cycle the same alternative can be decided by finite
+inspection. Over arbitrary words, the witness-bearing clause for
+$\Event p$ cannot simply be identified constructively with
+$\neg\Always\neg p$. The student can formalise the equivalence with LPO
+and explain its metamathematical significance using, for example,
+Escard\'o's presentation~\cite{escardo}. Proving such an equivalence is
+different from proving independence of LPO within the formalisation.
+
+This study should clarify why finite certificates suffice for the
+constructive syntactic result. For later comparison with S1S,
+Lichter and Smolka analyse the assumptions needed to pass from ultimately
+periodic to arbitrary-sequence semantics~\cite{lichter}. Their precise
+results concern S1S and B\"uchi automata; they should not be transferred
+to LTL without a separate argument.
+
+\section{Small examples and readable proofs}
+
+The implementation should be exercised throughout the project. An initial
+suite can include the existing examples and the following targets for
+the Until extension:
+\begin{align*}
+ &(p\Until q)\to\Event q,\\
+ &\Always(p\to r)\to\bigl((p\Until q)\to(r\Until q)\bigr),\\
+ &(p\Until q)\leftrightarrow\bigl(q\lor(p\land\Next(p\Until q))\bigr).
+\end{align*}
+These should yield derivations. The invalid converse
+$\Event q\to(p\Until q)$ should yield a countermodel.
+Further examples should include nested temporal operators, several
+eventuality obligations, and formula families whose size can be varied.
+
+Decision time, construction of a certificate, and checking or printing it
+must be measured separately. The current development already illustrates
+that a small Boolean computation can conceal a large proof term.
+The comparison should record the Agda version, evaluation method, formula
+size, explored states, certificate size, and execution times; historical
+timings in the repository are starting information, not new measurements.
+
+Readable proof output is an objective to evaluate on the examples. Suitable
+output would use named temporal lemmas, explicit invariants, and clearly
+identified calls to a proved propositional checker. Every displayed
+inference should reconstruct a checked derivation. Countermodels should
+display the prefix and cycle as valuations of the propositional variables.
+Concise output on all formulas is not assumed.
+
+\section{Scope and expected outcome}
+
+The core project comprises learning LTL and its standard proof, explaining
+the constructive argument, extending the Agda development with Until,
+and demonstrating the result on small nontrivial examples. Refactoring
+should serve these goals. The final thesis should state exactly which
+results have been formalised and which improvements remain proposals.
+
+The expected deliverables are a mathematical exposition, a documented Agda
+development with reproducible checking instructions, an executable example
+suite, and an evaluation of proof output and computational costs. The
+student should be able to explain the central invariants and justify the
+chosen representations and interfaces.
+
+If progress permits, one further verified optimisation or a more systematic
+proof presentation can be added. Applying the approach to the existing
+S1S development is an ambitious extension; S2S is a longer-term research
+direction. Neither is required for completion of this thesis.
+
+\begin{thebibliography}{9}
+\bibitem{benari}
+M.~Ben-Ari, \emph{Mathematical Logic for Computer Science}, 3rd edition,
+Springer, 2012. Temporal logic chapters, pp.~231--272.
+\href{https://doi.org/10.1007/978-1-4471-4129-7}{Publisher and electronic edition}.
+
+\bibitem{vardi}
+M.~Y.~Vardi, \emph{An automata-theoretic approach to linear temporal logic},
+in F.~Moller and G.~Birtwistle (eds.), \emph{Logics for Concurrency:
+Structure versus Automata}, LNCS~1043, Springer, 1996, pp.~238--266.
+\href{https://www.cs.rice.edu/~vardi/papers/banff94rj.pdf}{Author's PDF}.
+
+\bibitem{gerth}
+R.~Gerth, D.~Peled, M.~Y.~Vardi, and P.~Wolper,
+\emph{Simple on-the-fly automatic verification of linear temporal logic},
+in \emph{Protocol Specification, Testing and Verification XV}, 1995,
+pp.~3--18.
+\href{https://www.cs.rice.edu/~vardi/papers/pstv95rj.pdf}{Author's PDF}.
+
+\bibitem{schimpf}
+A.~Schimpf, S.~Merz, and J.-G.~Smaus,
+\emph{Construction of B\"uchi automata for LTL model checking verified in
+Isabelle/HOL}, TPHOLs~2009, LNCS~5674, pp.~424--439.
+\href{https://homepages.loria.fr/SMerz/papers/tphols2009.html}{Paper and bibliographic information}.
+
+\bibitem{escardo}
+M.~H.~Escard\'o, \emph{Omniscience}, Agda lecture material, 2011.
+\href{https://cs.ioc.ee/ewscs/2012/escardo/agda/Omniscience.html}{Online Agda presentation of LPO}.
+
+\bibitem{lichter}
+M.~Lichter and G.~Smolka, \emph{Constructive Analysis of S1S and B\"uchi
+Automata}, 2018 preprint, arXiv:1804.04967.
+\href{https://www.ps.uni-saarland.de/extras/S1S/}{Paper and Coq development}.
+
+\bibitem{development}
+\emph{Constructive LTL decision procedures in Agda}, existing development
+and mathematical notes. \url{https://github.com/coquand/LTL}.
+\end{thebibliography}
+\end{document}

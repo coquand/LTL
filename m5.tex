@@ -1,0 +1,655 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage[margin=3cm]{geometry}
+
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{corollary}[theorem]{Corollary}
+\theoremstyle{definition}
+\newtheorem{definition}[theorem]{Definition}
+\newtheorem{remark}[theorem]{Remark}
+
+\newcommand{\Next}{\mathop{\bigcirc}}
+\newcommand{\Always}{\mathop{\square}}
+\newcommand{\Event}{\mathop{\lozenge}}
+\newcommand{\Sub}{\mathrm{Sub}}
+\newcommand{\St}{\mathrm{St}}
+\newcommand{\Ust}{\mathrm{U}}
+\newcommand{\proves}{\vdash_{\mathcal{L}}}
+\newcommand{\Reach}{\mathrm{Reach}}
+\newcommand{\outs}{\mathrm{out}}
+
+\title{A finite fair-graph certificate\\
+{\large and the SCC decision procedure for LTL, made proof-producing}}
+\author{}
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+The standard automata-theoretic decision procedure for LTL satisfiability
+decomposes the state graph into strongly connected components: a non-trivial
+component is accepting when it meets every fairness set, and a fair path exists
+iff an accepting component is reachable.  Its correctness rests on the
+assertion that an infinite path in a finite graph eventually remains within one
+component, which is infinitary and, in the negative direction, classical.  We
+show that the assertion is not needed if the procedure is asked to return a
+certificate rather than a bit.  The negative answer is taken to be a
+\emph{well-founded record of a removal order} --- at each step either a vertex
+with no out-edge, or a successor-closed block missing a fairness set --- and
+this record both refutes the existence of a fair cycle, by two inductions on a
+finite closed trail, and serves as the induction principle from which Hilbert
+proofs are read off.  The resulting statement is a theorem of graph theory with
+no formula in it; the temporal content enters only through the choice of
+fairness predicates.  Everything has been checked in Agda, and the resulting
+procedure is compared, by checked equation, with the one of the companion
+note~\cite{m4}.
+\end{abstract}
+
+\section*{Introduction}
+
+The companion note~\cite{m4} decides $\proves\varphi$ by an elimination
+procedure and reads a Hilbert proof off its failure.  The present note does the
+same for the other standard presentation, the one that decomposes the graph
+into strongly connected components; the two are then in the same development
+and can be compared by computation rather than by assertion.
+
+Three things came out of doing this that are not visible in either informal
+account.
+
+First, the graph argument \emph{factors}.  Neither the elimination of~\cite{m4}
+nor the usual SCC presentation separates the graph theory from the logic: sets
+of states, reachability, components and lassos are all described in terms of
+subformulas.  They need not be.  Section~\ref{sec:graph} states and proves a
+theorem about a finite graph, finitely many decidable vertex predicates and a
+vertex, in which no formula occurs; Sections~\ref{sec:lasso}
+and~\ref{sec:extract} are the translation layer.  The choice of predicate is
+where the logic goes, and it is one line (Definition~\ref{def:evpred}).
+
+Second, the ``key insight'' is a red herring in the direction it is usually
+stated.  What is needed for correctness is not that an infinite path stays in a
+component, but the contrapositive statement about a \emph{finite} cycle, and
+that is two inductions on a closed trail of the length it happens to have
+(Theorem~\ref{thm:nocirc}).  No infinite path is constructed and nothing is
+coinductive.
+
+Third, the SCC form gives a genuine improvement on one point and a genuine loss
+on another, and both can be measured.  The improvement: in a component that is
+bad for an eventuality, \emph{every} state has that eventuality pending, so a
+single use of (Ind) refutes the whole component, where the elimination
+of~\cite{m4} refutes one state per round.  The loss: mutual reachability is
+quadratic where the elimination is one removing pass, and on the branch where
+the SCC decomposition is the whole story it is measurably slower
+(Section~\ref{sec:compare}).
+
+\section{The graph layer}\label{sec:graph}
+
+Throughout this section a \emph{graph} is a finite list $V$ of vertices
+together with a decidable edge relation $G$; a \emph{fairness family} is a
+finite list $f_1,\dots,f_k$ of decidable predicates on vertices.  No formula
+occurs anywhere in this section.
+
+For a sublist $W\subseteq V$ write $\outs_W(x):=\{y\in W: G(x,y)\}$.
+
+\begin{definition}
+A \emph{trail} in $W$ from $u$ to $w$ is a finite list $z_1,\dots,z_n$ of
+vertices of $W$ with $G(u,z_1)$, $G(z_i,z_{i+1})$ and $z_n=w$; the empty trail
+runs from $u$ to $u$.  A \emph{circuit at $r$ in $W$ for $f_1,\dots,f_k$} is a
+non-empty trail from $r$ to $r$ together with, for each $i$, a vertex on it
+satisfying $f_i$.
+\end{definition}
+
+Indexing a trail by its endpoint rather than computing the endpoint with a
+$\mathrm{last}$ function is what keeps every concatenation below free of
+equational bookkeeping; this is the device of~\cite[\S4c]{m4} again.
+
+\begin{definition}[Certificate]\label{def:cert}
+The certificates $\mathrm{Cert}(W)$, indexed by the list $W$ of vertices
+\emph{still under consideration}, are generated inductively by
+\begin{itemize}
+\item[(C0)] $W$ is empty;
+\item[(C1)] there is $x\in W$ with $\outs_W(x)=\varnothing$, and a certificate
+  for $W\setminus\{x\}$;
+\item[(C2)] there are $C\subseteq W$ closed under $G$-successors lying in $W$,
+  and an $i$ with $f_i(z)=0$ for every $z\in C$, and a certificate for
+  $W\setminus C$.
+\end{itemize}
+\end{definition}
+
+A certificate is a finite object: it is the removal order, with a reason
+attached to each step.  It is \emph{not} a decomposition into components ---
+no component object, no quotient and no equality of components occurs --- and
+(C2) does not require $C$ to be strongly connected, only successor-closed.
+
+\begin{lemma}[Induction principle]\label{lem:certall}
+Let $R$ be a property of vertices.  Suppose
+\begin{itemize}
+\item[(H1)] for every $W$ and every $x\in W$ with $\outs_W(x)=\varnothing$: if
+  $R$ holds of every vertex outside $W$, then $R(x)$;
+\item[(H2)] for every $W$, every $C\subseteq W$ closed under $G$-successors in
+  $W$ and every $i$ with $f_i$ false throughout $C$: if $R$ holds of every
+  vertex outside $W$, then $R$ holds of every $z\in C$.
+\end{itemize}
+Then a certificate for $W$, together with $R$ outside $W$, gives $R$ of every
+vertex.
+\end{lemma}
+
+\begin{proof}
+Induction on the certificate.  In case (C0) nothing is left, so the hypothesis
+already gives $R$ everywhere.  In case (C1) apply (H1) and note that a vertex
+outside $W\setminus\{x\}$ is outside $W$ or is $x$.  Case (C2) is the same with
+(H2) and $C$ in place of $x$.
+\end{proof}
+
+Lemma~\ref{lem:certall} is the whole reason the certificate is defined as it
+is: (H1) and (H2) are, on the nose, cases (R1) and (R2)
+of~\cite[Def.~4.1]{m4}, with the formulas removed.  That is made precise in
+Section~\ref{sec:extract}.
+
+\subsection*{Computing one}
+
+\begin{definition}\label{def:reach}
+$\Reach_W(v)$ is computed by a \emph{growing} search: start from the empty
+accumulator; a round adds every vertex of $W$ that is wanted --- is $v$, or is
+a $G$-successor of something already accumulated --- and is not yet there; stop
+when a round adds nothing.
+\end{definition}
+
+The stopping condition, not a bound, is what gives completeness: when a round
+adds nothing the accumulator contains $v$ and is closed under successors in
+$W$, and an induction along a trail then shows it contains everything reachable.
+There is no fuel and no claim that $|W|$ rounds suffice.  Termination is by the
+inductive finiteness of vertices: one cannot go on choosing distinct vertices
+from a fixed finite list.  This is the device of~\cite[\S4g]{m4}, applied to the
+one computation that note deliberately avoided.
+
+\begin{definition}
+$\mathrm{scc}_W(r):=\{w\in\Reach_W(r): r\in\Reach_W(w)\}$, and $r$ is
+\emph{terminal} in $W$ when $\Reach_W(r)=\mathrm{scc}_W(r)$, i.e.\ when
+everything $r$ reaches reaches $r$ back.
+\end{definition}
+
+Both are decidable, and the condensation is never built: a condensation edge is
+followed by \emph{moving the representative}, and terminality is one boolean.
+
+\begin{lemma}\label{lem:findterm}
+A non-empty $W$ contains a terminal representative.
+\end{lemma}
+
+\begin{proof}
+While $r$ is not terminal there is $w\in\Reach_W(r)$ with $r\notin\Reach_W(w)$;
+move the representative to $w$.  The search terminates because
+$\Reach_W(w)$ avoids $r$, so each move gives up one vertex of the ambient list,
+and one cannot go on giving up distinct vertices.  The invariant carried is a
+single hypothesis --- every vertex of the current reachable set still satisfies
+the bar predicate --- and no list of visited representatives is needed; that
+acyclicity of the condensation makes the components visited distinct is thereby
+not a lemma but the termination of this search.
+\end{proof}
+
+\begin{lemma}[One step]\label{lem:block}
+Suppose every $x\in W$ has an out-edge in $W$.  Then either $W$ is empty, or
+its terminal component is fair and a circuit is built in it, or its terminal
+component misses some $f_i$ everywhere.
+\end{lemma}
+
+\begin{proof}
+Take $r$ terminal by Lemma~\ref{lem:findterm} and $C:=\mathrm{scc}_W(r)$.  If
+some $f_i$ is false throughout $C$ we are in the third case.  Otherwise each
+$f_i$ has a witness $w_i\in C$.  Since $r$ has an out-edge $x\in W$ and $r$
+reaches $x$, terminality sends a trail from $x$ back to $r$, so there is a
+non-empty closed trail $c_0$ at $r$.  Now add one \emph{leg} per fairness
+predicate: the leg for $f_i$ is $c_0$ followed by a trail $r\to w_i$ inside $C$
+followed by a trail $w_i\to r$ inside $C$, both of which exist because $C$ is a
+component.  Carrying $c_0$ in front makes the first half non-empty, so $w_i$ is
+a vertex the leg \emph{visits} and not merely an endpoint --- which matters when
+$w_i=r$.  The concatenation of the legs with $c_0$ is a circuit at $r$.
+\end{proof}
+
+\begin{theorem}[Fair-graph certificate]\label{thm:fairgraph}
+Given a graph, a fairness family and a vertex $v\in V$, one can compute either
+\begin{itemize}
+\item[(a)] a lasso from $v$ --- a trail from $v$ to some $r$, and a circuit at
+  $r$ --- whose cycle meets every $f_i$, or
+\item[(b)] a certificate for $\Reach_V(v)$.
+\end{itemize}
+\end{theorem}
+
+\begin{proof}
+Run the following removing iteration on $W:=\Reach_V(v)$.  Ask whether some
+$x\in W$ has $\outs_W(x)=\varnothing$.  If so, recurse on $W\setminus\{x\}$;
+a lasso found there is a lasso in $W$, and a certificate found there is
+extended by (C1).  If not, apply Lemma~\ref{lem:block}: the empty case gives
+(C0), the fair case gives a circuit, and the unfair case gives a $C$ and an $i$,
+and we recurse on $W\setminus C$, extending by (C2).  Each step removes at least
+one vertex --- for (C2) the representative $r$, which lies in its own component
+--- so the iteration terminates.  Finally a circuit at $r$ inside $\Reach_V(v)$
+is joined to $v$ by the trail that put $r$ in the reachable set.
+\end{proof}
+
+Note that no rank function and no topological sort appear: the iteration
+removes, so termination is by shrinking, and the only thing that needed proof
+is Lemma~\ref{lem:findterm}.
+
+\subsection*{The two answers are exclusive}
+
+This is the half that replaces the lecture's ``key insight'', and the point is
+that it comes out finitary.
+
+\begin{theorem}\label{thm:nocirc}
+A certificate for $W$ forbids a circuit inside $W$.
+\end{theorem}
+
+\begin{proof}
+Induction on the certificate; each step shows the circuit \emph{survives} the
+removal, so it is still there when nothing is left, which (C0) forbids.
+
+For (C1): a vertex on a cycle has a successor --- along a trail, every vertex
+visited has a successor provided the endpoint has, and for a closed trail the
+endpoint is the start, whose successor is the trail's own first step --- so a
+sink lies on no cycle, and the cycle avoids $x$.
+
+For (C2): any vertex of a cycle reaches any other --- take the suffix of the
+trail to the base point and then the prefix out again --- and a successor-closed
+block that a trail starts in contains everything the trail reaches.  So if the
+cycle met $C$ it would lie inside $C$, and then its witness for $f_i$ would
+satisfy an $f_i$ that is false throughout $C$.  Hence the cycle avoids $C$.
+\end{proof}
+
+\begin{corollary}\label{cor:decision}
+The negative answer of Theorem~\ref{thm:fairgraph} is a decision: if a fair
+lasso from $v$ exists at all, answer (a) is returned.
+\end{corollary}
+
+\begin{proof}
+A lasso from $v$ has all of its cycle inside $\Reach_V(v)$, by the completeness
+of Definition~\ref{def:reach}; so a certificate for $\Reach_V(v)$ would
+contradict Theorem~\ref{thm:nocirc}.
+\end{proof}
+
+Both branches are inhabited and neither theorem is vacuous: the graph
+$p\to q$, $q\to s$, $s\to q$ with the two predicates ``is $q$'', ``is $s$''
+exhibits a circuit, and with the single predicate ``is $p$'' exhibits a
+certificate, whose removal order is (C2), (C1), (C0) --- the recurrent
+component $\{q,s\}$ is refuted first, and only then is $p$ a sink.  That is the
+backwards induction in miniature: $p$ is refuted \emph{because} its successors
+already were.
+
+\section{Where relevance goes}\label{sec:evpred}
+
+Fix $\varphi$ and let $\Always A_1,\dots,\Always A_m$ enumerate the members of
+$\Sub(\varphi)$ of the form $\Always A$, as in~\cite{m4}.  The graph is taken
+to be the states with the transition relation of~\cite[Def.~2.3]{m4}.
+
+The informal argument quantifies over ``the fairness sets \emph{relevant} in
+$C$'', which is well defined only because a pending eventuality is uniform on a
+component: if $\Always A\notin v$ for one $v\in C$ then, by persistence along a
+path plus strong connectivity, $\Always A\notin w$ for every $w\in C$.  We do
+not need that lemma, because relevance can be put inside the predicate.
+
+\begin{definition}\label{def:evpred}
+For each $j$ let
+\[
+  f_j(z) \;:=\; [\,\Always A_j\in z\,]\ \vee\ [\,A_j\notin z\,],
+\]
+that is: the $j$-th eventuality is not pending at $z$, or it is fulfilled at
+$z$.
+\end{definition}
+
+A component in which the eventuality is not pending meets $f_j$ for free, and a
+component in which it is pending meets $f_j$ exactly by fulfilling it.  So the
+graph layer of Section~\ref{sec:graph} knows only ``$C$ meets every $f$'', and
+uniformity on a component is never needed.  The two readings of the same
+definition are what Sections~\ref{sec:lasso} and~\ref{sec:extract} use: its
+\emph{truth} at a witness is fulfilment, and its \emph{falsity} throughout a
+block is exactly the pair of hypotheses of case (R2).
+
+\section{The lasso branch}\label{sec:lasso}
+
+A trail in the state graph \emph{is} a path in the sense of~\cite[\S6]{m4}; the
+only work is the cycle-fulfilment property that
+Proposition~\ref{prop:lasso5.3} below requires.
+
+\begin{lemma}[Persistence to a visited state]\label{lem:persistto}
+Let $\Always A\notin v$ and let $z$ be a state visited by a path
+$v\to\cdots\to x$.  Then either the eventuality is fulfilled at some state
+visited, or $\Always A\notin z$.
+\end{lemma}
+
+\begin{proof}
+The induction of~\cite[Lem.~2.8]{m4} propagated along the path, with the target
+carried along and the path cut short when it is reached.
+\end{proof}
+
+The corresponding statement for the \emph{endpoint} is the one~\cite{m4} needs;
+the witness that Theorem~\ref{thm:fairgraph} supplies lies somewhere on the
+cycle and not at its base point, which is why the visited-state form is needed
+here.
+
+\begin{proposition}\label{prop:lasso5.3}
+A fair lasso in the sense of Theorem~\ref{thm:fairgraph}, for the predicates of
+Definition~\ref{def:evpred} and inside any set of states contained in
+$U_\infty$, is a fulfilling lasso in the sense of~\cite[Prop.~5.3]{m4}.
+\end{proposition}
+
+\begin{proof}
+The stem and the cycle are paths, and the cycle is non-empty, so only the
+cycle-fulfilment property has to be produced: for a state $s$ on the cycle at
+which $\Always A_j$ is pending, a state of the cycle at which $A_j$ fails.
+Travel along the cycle from $s$ to the base point $r$: by~\cite[Lem.~2.8]{m4}
+either $A_j$ fails on the way --- and we are done --- or $\Always A_j\notin r$.
+In the latter case go out from $r$ to the witness $w$ that
+Theorem~\ref{thm:fairgraph} chose for $f_j$: by Lemma~\ref{lem:persistto},
+either $A_j$ fails on the way, or $\Always A_j\notin w$, and then the first
+disjunct of $f_j(w)$ is false, so the second holds and $A_j\notin w$.
+\end{proof}
+
+So the positive branch feeds the unchanged tail of~\cite{m4}: the lasso is
+unwound to a run, Hintikka's lemma evaluates $\neg\varphi$ to $1$ at the start,
+and soundness turns any derivation into a contradiction.
+
+\begin{remark}\label{rem:converse}
+The converse also holds, and is worth stating because it makes
+Proposition~\ref{prop:lasso5.3} unconditional.  A fulfilling lasso is a fair
+lasso for the $f_j$: if the eventuality is not pending at the base point, the
+base point is its own witness --- and it lies \emph{on} the cycle, the cycle
+being non-empty --- and if it is pending, the lasso's own cycle-fulfilment
+property supplies a state of the cycle at which $A_j$ fails, which is the other
+disjunct.  Hence, by~\cite[Prop.~5.3]{m4} and Corollary~\ref{cor:decision},
+Theorem~\ref{thm:fairgraph} run on $U_\infty$ \emph{always} returns answer (a),
+and one obtains a second proof of~\cite[Prop.~5.3]{m4} in which no round and no
+pigeonhole occurs.
+\end{remark}
+
+\section{The refutation branch}\label{sec:extract}
+
+Take $R(v):=\ \proves\neg\chi_v$ in Lemma~\ref{lem:certall}.  Then the
+hypothesis carried --- $R$ holds outside $W$ --- is the induction hypothesis of
+\cite[Thm.~4.1]{m4} verbatim, and the two hypotheses to be discharged are its
+two cases.
+
+\medskip\noindent\textbf{(H1) is case (R1).}
+The out-neighbours of $x$ inside $W$ are the $\to$-successors of $x$ inside
+$W$, so ``$\outs_W(x)=\varnothing$'' \emph{is} the hypothesis of (R1).  The
+proof is~\cite[Thm.~4.1, case (R1)]{m4} unchanged: the step lemma offers all
+state-successors, each is refuted by the induction hypothesis, (D1) puts the
+refutation under $\Next$ and (Lin) brings the negation out.
+
+\medskip\noindent\textbf{(H2) is case (R2), improved.}
+Let $C$ be the block and $f_j$ the predicate it misses.  Then for every $z\in C$
+\[
+  f_j(z)=0
+  \qquad\text{i.e.}\qquad
+  \Always A_j\notin z \quad\text{and}\quad A_j\in z ,
+\]
+which are the two hypotheses (R2) needs, \emph{at every state of $C$} rather
+than at one state per round.  Take $B:=\beta_C$; then
+\begin{itemize}
+\item[(i)] $\proves B\to A_j$, since $A_j\in z$ throughout $C$;
+\item[(ii)] $\proves B\to\Next B$, by the step lemma at each $z\in C$, dropping
+  the successors outside $W$ by the induction hypothesis and keeping the rest
+  because $C$ is closed under successors lying in $W$;
+\item[(iii)] $\proves B\to\Always A_j$, by (Ind) through (D5) and (D3).
+\end{itemize}
+Since every $z\in C$ has $\Always A_j$ pending, $\proves\chi_z\to\neg\Always
+A_j$, and $\proves\chi_z\to B$; so $\proves\neg\chi_z$ for \emph{every} $z\in C$
+from a single use of (Ind).
+\medskip
+
+This is the improvement the SCC form buys.  In~\cite{m4} the greatest fixed
+point $W_j$ is recomputed each round and refutes the states pending in it one
+round at a time; here the whole component leaves at once, with one invariant.
+
+\begin{remark}
+The reader will notice that Lemma~\ref{lem:certall} quantifies (H1) and (H2)
+over an arbitrary $W$ and knows nothing about states --- it is the graph
+layer's induction principle and has no business knowing.  The formalisation
+therefore intersects the block with the ambient state set on the spot; the
+intersection is still successor-closed, because the state set is.  It is one
+filter and no new theory.
+\end{remark}
+
+\section{Two lemmas at the seam}\label{sec:seam}
+
+The two branches want different sets.  The refutation branch is stated against
+the set the search explores --- in the formalisation $\Ust(\varphi)$, the
+$\to$-closure of the states containing $\varphi$, which replaces $\St(\varphi)$
+for the search but not for the derivations --- while the lasso branch delivers
+into machinery stated against $U_\infty$.  Two lemmas bridge them, and neither
+is in~\cite{m4}.
+
+\begin{lemma}\label{lem:seeded}
+Every state of $\Ust(\varphi)$ is reached by a path from a state containing
+$\varphi$.
+\end{lemma}
+
+\begin{proof}
+The closure is computed by the growing search of Definition~\ref{def:reach}
+with the seed changed; the same recursion shows that a state a round adds is
+either a seed --- and then the empty path does it --- or a successor of
+something already accumulated, and then that thing's path grows by one step.
+\end{proof}
+
+Lemma~\ref{lem:seeded} says the closure contains \emph{nothing else}, which is
+what makes ``a fair component anywhere in $\Ust(\varphi)$'' the right question
+to ask: without it the positive branch would exhibit a loop that is a
+countermodel to nothing.
+
+\begin{definition}
+A set $C$ of states is a \emph{trap} if every $z\in C$ has a
+$\to$-successor in $C$, and for every $z\in C$ and every $j$ pending at $z$
+there is a path inside $C$ from $z$ to a state fulfilling the $j$-th
+eventuality.
+\end{definition}
+
+\begin{lemma}\label{lem:trap}
+A trap $C\subseteq\St(\varphi)$ contained in $\Ust(\varphi)$ is contained in
+$U_\infty$.
+\end{lemma}
+
+\begin{proof}
+The two clauses of a trap are the negations of (R1) and (R2) read as properties
+of a \emph{set}: if $C\subseteq U_k$ then no $z\in C$ is removed by (R1),
+having a successor in $C\subseteq U_k$; and none is removed by (R2), since a
+path inside $C\subseteq U_k$ to a fulfilling state contradicts the soundness of
+the greatest fixed point of~\cite[Rem.~3.2]{m4}.  So $C\subseteq U_{k+1}$, and
+the claim follows by induction along the elimination.
+\end{proof}
+
+Lemma~\ref{lem:trap} is one direction of the completeness of the elimination:
+it says the elimination throws nothing useful away.  The other direction ---
+that $U_\infty$ is itself a trap --- is~\cite[Lem.~5.1]{m4}.  Note that the
+vertex set of a fair lasso is a trap: every vertex has the next one as a
+successor, the base point has the cycle's first step, and a pending eventuality
+is fulfilled along the walk to the witness by
+Proposition~\ref{prop:lasso5.3}'s argument.
+
+\section{The decision procedure}\label{sec:decide}
+
+\begin{theorem}\label{thm:sccmain}
+There is a total computable function taking $\varphi$ to an element of
+\[
+  \mathrm{Deriv}_{\mathcal{L}}(\varphi)\;+\;\mathrm{LassoCountermodel}(\varphi),
+\]
+which decides by asking which answer Theorem~\ref{thm:fairgraph} gives on
+$\Ust(\neg\varphi)$.
+\end{theorem}
+
+\begin{proof}
+Run the iteration of Theorem~\ref{thm:fairgraph} on the whole of
+$\Ust(\neg\varphi)$ --- not from a single vertex, since the refutation branch
+must account for every state at once --- with the predicates of
+Definition~\ref{def:evpred}.
+
+If it returns a certificate for $\Ust(\neg\varphi)$, apply
+Lemma~\ref{lem:certall} with $R(v):=\ \proves\neg\chi_v$ and
+Section~\ref{sec:extract}; the hypothesis outside $\Ust(\neg\varphi)$ is
+vacuous.  Every state of $\Ust(\neg\varphi)$ is then refutable, and a state
+outside it cannot contain $\neg\varphi$, so $\proves\chi_v\to\varphi$ for all
+of them by (L2); conclude by~\cite[Lem.~2.5]{m4} and (L3),(L5).  Observe that
+the elimination of~\cite{m4} is not run at all on this branch.
+
+If it returns a fair component at $r$, take by Lemma~\ref{lem:seeded} a state
+$s$ containing $\neg\varphi$ and a path $s\to\cdots\to r$; stem and cycle
+together are a fair lasso from $s$.  Its vertex set is a trap, so by
+Lemma~\ref{lem:trap} it lies in $U_\infty$, and
+Proposition~\ref{prop:lasso5.3} turns it into a fulfilling lasso through $s$.
+Hintikka's lemma and soundness then give the countermodel exactly as
+in~\cite[Thm.~6.1]{m4}.
+\end{proof}
+
+The two branches are asymmetric in the same way as in~\cite{m4}: the
+certificate branch returns a derivation and never mentions a lasso, and the
+fair branch returns a lasso and mentions a derivation only to consume one.
+Note the asymmetry in cost as well.  On the certificate branch the elimination
+is never computed; on the fair branch it \emph{is} computed, by
+Lemma~\ref{lem:trap}, but it is not what decides and it produces no lasso.
+
+\section{Comparison}\label{sec:compare}
+
+The two procedures are in one development, so they can be compared by checked
+equation rather than by running them and looking.
+
+\medskip\noindent\textbf{Agreement.}  On the forty-six statements of Figure~11
+of~\cite{sgl}, together with
+$\Always\Event(p\vee q)\to(\Always\Event p\vee\Always\Event q)$, the two
+procedures take the same branch; each of the forty-seven equations
+$\mathrm{isProof}(\mathrm{decideSCC}\,X)=\mathrm{isProof}(\mathrm{decide}\,X)$
+is checked.  Twenty-two are proofs and twenty-five are countermodels.
+
+\medskip\noindent\textbf{Different lassos.}  For
+$\Always(p\vee q)\to(\Always p\vee\Always q)$ the two countermodels differ:
+\begin{center}
+\begin{tabular}{lccc}
+              & start & stem & cycle\\\hline
+$\mathrm{decide}$    & $p\wedge q$, neither forever & 3 & 1\\
+$\mathrm{decideSCC}$ & $q$, not $p$                 & 2 & 4\\
+\end{tabular}
+\end{center}
+Both are countermodels and each carries its own refutation of derivability.
+The cycle of length four is not an accident: the construction of
+Lemma~\ref{lem:block} prepends one leg per fairness predicate to the bare loop,
+and $\Sub$ of the negation has three eventualities.
+
+\medskip\noindent\textbf{Cost.}  Measured cold, with the import baseline
+subtracted:
+\begin{center}
+\begin{tabular}{lcc}
+   & $\mathrm{decide}$ & $\mathrm{decideSCC}$\\\hline
+$\Always(p\vee q)\to(\Always p\vee\Always q)$ & $0.19$ s & $0.18$ s\\
+$\Always\Event(p\vee q)\to(\Always\Event p\vee\Always\Event q)$
+                                              & $0.78$ s & $1.24$ s\\
+\end{tabular}
+\end{center}
+The first is decided on the countermodel branch and the second on the proof
+branch.  The prediction that the SCC form is slower --- mutual reachability
+being quadratic in the component where the greatest fixed point is one removing
+pass --- is confirmed on the proof branch, where it is $1.6$ times slower, and
+refuted on the countermodel branch, where the two are level: there the SCC
+procedure pays for both the graph search and Lemma~\ref{lem:trap}, but saves
+the round construction and the boundary search of~\cite[Prop.~5.3]{m4}, and on
+that formula the two cancel.
+
+\section{Remarks}
+
+\begin{remark}[What the phase buys, and what it does not]
+It does not buy constructivity: \cite{m4} is already constructive, and its
+greatest fixed point is arguably the SCC decomposition performed without
+decomposing --- the union of the bad recurrent regions, computed by a removing
+iteration in one pass.  It does not buy speed.  What it buys is the factoring
+of Section~\ref{sec:graph}, an explanation of \emph{why} (Ind) appears at all,
+and the refutation of a whole component by one invariant.
+\end{remark}
+
+\begin{remark}[Absences]
+No infinite path is constructed; nothing is coinductive; there is no pigeonhole
+lemma; there is no rank function and no topological sort; there is no component
+object, no quotient and no equality of components; and the condensation is
+never built.  Definition~\ref{def:reach} is the one computation
+\cite[\S4c]{m4} declined to do, and it is done without cardinality theory.
+\end{remark}
+
+\begin{remark}[A worked example, and a correction]\label{rem:lecture}
+The appendix of the lecture notes~\cite{lec} analyses
+$\Event a\wedge\Event b\to\Event(a\wedge b)$ by hand: it lists the locally
+consistent states with $\Event(a\wedge b)=0$, their out-edges, and a
+countermodel path.  The graph agrees with the one computed here exactly ---
+eight states with the same valuations, twenty-four edges, the same out-degrees
+--- although the two are obtained differently: the hand analysis \emph{assumes}
+$\Event(a\wedge b)=0$ to cut its table down, whereas here the eight states are
+the closure of the states containing the negation and $\Event(a\wedge b)=0$
+falls out.
+
+The countermodel path given there, $s_3\to s_5\to s_7\to s_7\to\cdots$ looping
+at $s_7$, is however \emph{not fair}: at $s_7$ one has $\Event b=1$ and $b=0$,
+so $s_7$ lies outside the very fairness set $F_{\Event b}$ that the notes
+define, and the loop promises $b$ forever without delivering it.  In the
+notation of Definition~\ref{def:evpred} this is the checked equation
+$f_{\Event b}(s_7)=0$.  The path presumably intended is
+$s_3\to s_5\to s_7\to s_5\to\cdots$, alternating so that $b$ recurs at $s_5$ and
+$a$ at $s_7$; both edges exist.  The procedure of
+Theorem~\ref{thm:sccmain} returns instead $s_7\to s_4\to s_0\to s_0\to\cdots$:
+$a$ at stage $0$, $b$ at stage $1$, and everything false from stage $2$ on.  It
+ends in a state where nothing is pending at all, which the hand analysis never
+considers because it is looking for a loop that \emph{keeps} the eventualities
+alive.
+\end{remark}
+
+\begin{remark}[Formalisation]
+Everything above has been checked in Agda --- \texttt{--safe},
+\texttt{--without-K}, \texttt{--exact-split}, no library, no postulates, no
+unfilled goals, no termination pragmas, and no \texttt{with} --- beside the
+development of~\cite{m4} and sharing its step lemma, its case (R1), its notion
+of run and its soundness.  The new modules are
+\begin{center}
+\begin{tabular}{llrr}
+\texttt{LTL.Graph}      & Section~\ref{sec:graph}     & 1225 & 0.60 s\\
+\texttt{LTL.SccLasso}   & Sections~\ref{sec:evpred}, \ref{sec:lasso}
+                                                      &  372 & 0.34 s\\
+\texttt{LTL.SccExtract} & Section~\ref{sec:extract}   &  380 & 0.32 s\\
+\texttt{LTL.SccTrap}    & Section~\ref{sec:seam}      &  289 & 0.21 s\\
+\texttt{LTL.DecideSCC}  & Section~\ref{sec:decide}    &  256 & 0.30 s\\
+\texttt{LTL.Compare}    & Section~\ref{sec:compare}   &  408 & 20.7 s\\
+\texttt{LTL.Lecture}    & Remark~\ref{rem:lecture}    &  184 & 10.2 s\\
+\end{tabular}
+\end{center}
+lines and cold check time; the last two are benchmarks, being forty-seven
+decision problems and one worked example respectively.  \texttt{LTL.Graph}
+contains no occurrence of the type of formulas.
+
+Three places where formalising changed the argument rather than transcribing
+it.  Lemma~\ref{lem:persistto}, which the informal argument does not
+distinguish from persistence to the endpoint, and which is needed because the
+witness sits on the cycle rather than at its base point.
+Lemma~\ref{lem:seeded}, which the closure construction of~\cite{m4} did not
+have --- it proved that the closure contains the seeds and is closed, but not
+that it contains nothing else --- and without which the fair branch exhibits a
+loop that is a countermodel to nothing.  And Lemma~\ref{lem:trap}, which the
+informal accounts do not mention at all because they do not have two state
+sets to bridge; it is the one place where the SCC procedure must still compute
+the elimination of~\cite{m4}.
+\end{remark}
+
+\begin{remark}
+The construction is stated for the $\Always$-only syntax of~\cite{m4}, where
+persistence is (T3) and is already proved.  Extending it to \emph{until} faces
+exactly the obligation recorded at the end of~\cite{m4}, and one more: the
+fairness predicate of Definition~\ref{def:evpred} would become
+$[\,A\,\mathcal{U}\,B\notin z\,]\vee[\,B\in z\,]$, and the argument of
+Proposition~\ref{prop:lasso5.3} would have to carry the side condition that $A$
+holds along the way.
+\end{remark}
+
+\begin{thebibliography}{9}
+\bibitem{m4} \emph{Proof extraction from a failed LTL tableau: a uniform
+loop-invariant construction}, companion note.
+\bibitem{lec} \emph{A Complete Decision Algorithm for Linear Temporal Logic},
+lecture notes.
+\bibitem{sgl} P.~H.~Schmitt and J.~Goubault-Larrecq, \emph{Linear Temporal
+Logic}, Figure~11.
+\end{thebibliography}
+
+\end{document}
